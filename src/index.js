@@ -3,7 +3,9 @@ import { render } from 'react-dom';
 import { Provider } from 'react-redux';
 import Root from './components/Root';
 import configureStore from './store/configureStore';
+import 'react-dates/initialize';
 import './index.css';
+import 'react-dates/lib/css/_datepicker.css';
 
 const root = document.getElementById('root');
 

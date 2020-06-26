@@ -1,89 +1,31 @@
 import React, { Component } from 'react';
 import { connect } from 'react-redux';
-import { withStyles } from '@material-ui/core/styles';
+import { withStyles, withTheme } from '@material-ui/core/styles';
 import Grid from '@material-ui/core/Grid';
-import Table from '@material-ui/core/Table';
-import TableBody from '@material-ui/core/TableBody';
-import TableCell from '@material-ui/core/TableCell';
-import TableHead from '@material-ui/core/TableHead';
 import Fab from '@material-ui/core/Fab';
 import SettingsIcon from '@material-ui/icons/Settings';
-import TableRow from '@material-ui/core/TableRow';
 import Typography from '@material-ui/core/Typography';
 import Paper from '@material-ui/core/Paper';
-import Button from '@material-ui/core/Button';
-import IconButton from '@material-ui/core/IconButton';
-import DeleteIcon from '@material-ui/icons/Delete';
-import RefreshIcon from '@material-ui/icons/Refresh';
-import Select from 'react-select';
+import ReactMomentProptypes from 'react-moment-proptypes';
 import { withTranslation } from 'react-i18next';
 import PropTypes from 'prop-types';
+import moment from 'moment';
+import { extendMoment } from 'moment-range';
+import { DateRangePicker } from 'react-dates';
+import { Line } from '@nivo/line';
 import './TeacherView.css';
 import {
-  patchAppInstanceResource,
-  postAppInstanceResource,
   deleteAppInstanceResource,
   openSettings,
+  patchAppInstanceResource,
+  postAppInstanceResource,
 } from '../../../actions';
 import { getUsers } from '../../../actions/users';
 import { addQueryParamsToUrl } from '../../../utils/url';
 import Settings from './Settings';
-
-/**
- * helper method to render the rows of the app instance resource table
- * @param appInstanceResources
- * @param dispatchPatchAppInstanceResource
- * @param dispatchDeleteAppInstanceResource
- * @returns {*}
- */
-const renderAppInstanceResources = (
-  appInstanceResources,
-  { dispatchPatchAppInstanceResource, dispatchDeleteAppInstanceResource },
-) => {
-  // if there are no resources, show an empty table
-  if (!appInstanceResources.length) {
-    return (
-      <TableRow>
-        <TableCell colSpan={4}>No App Instance Resources</TableCell>
-      </TableRow>
-    );
-  }
-  // map each app instance resource to a row in the table
-  return appInstanceResources.map(({ _id, appInstance, data }) => (
-    <TableRow key={_id}>
-      <TableCell scope="row">{_id}</TableCell>
-      <TableCell>{appInstance}</TableCell>
-      <TableCell>{data.value}</TableCell>
-      <TableCell>
-        <IconButton
-          color="primary"
-          onClick={() => {
-            dispatchPatchAppInstanceResource({
-              id: _id,
-              data: { value: Math.random() },
-            });
-          }}
-        >
-          <RefreshIcon />
-        </IconButton>
-        <IconButton
-          color="primary"
-          onClick={() => dispatchDeleteAppInstanceResource(_id)}
-        >
-          <DeleteIcon />
-        </IconButton>
-      </TableCell>
-    </TableRow>
-  ));
-};
-
-const generateRandomAppInstanceResource = ({
-  dispatchPostAppInstanceResource,
-}) => {
-  dispatchPostAppInstanceResource({
-    data: { value: Math.random() },
-  });
-};
+import { MATERIAL_UI_THEME_TYPE } from '../../../config/propTypes';
+import { NIVO_LINE_MARGIN } from '../../../config/styles';
+import { DATE_FROMAT } from '../../../config/formats';
 
 export class TeacherView extends Component {
   static propTypes = {
@@ -96,29 +38,25 @@ export class TeacherView extends Component {
       button: PropTypes.string,
       message: PropTypes.string,
       fab: PropTypes.string,
+      chartTitle: PropTypes.string,
     }).isRequired,
     dispatchGetUsers: PropTypes.func.isRequired,
-    // inside the shape method you should put the shape
-    // that the resources your app uses will have
-    appInstanceResources: PropTypes.arrayOf(
+    // eslint-disable-next-line react/require-default-props
+    theme: MATERIAL_UI_THEME_TYPE,
+    actions: PropTypes.arrayOf(
       PropTypes.shape({
-        // we need to specify number to avoid warnings with local server
-        _id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-        appInstanceId: PropTypes.string,
-        data: PropTypes.object,
+        date: ReactMomentProptypes.momentObj,
+        count: PropTypes.number,
       }),
     ),
-    // this is the shape of the select options for students
-    studentOptions: PropTypes.arrayOf(
-      PropTypes.shape({
-        label: PropTypes.string,
-        value: PropTypes.string,
-      }),
-    ).isRequired,
+    minDate: ReactMomentProptypes.momentObj,
+    maxDate: ReactMomentProptypes.momentObj,
   };
 
   static defaultProps = {
-    appInstanceResources: [],
+    actions: [],
+    minDate: moment.utc(),
+    maxDate: moment.utc(),
   };
 
   static styles = theme => ({
@@ -149,10 +87,14 @@ export class TeacherView extends Component {
       bottom: theme.spacing(2),
       right: theme.spacing(2),
     },
+    chartTitle: {
+      marginBottom: theme.spacing(2),
+    },
   });
 
   state = {
-    selectedStudent: null,
+    fromDate: moment.utc(),
+    toDate: moment.utc(),
   };
 
   constructor(props) {
@@ -161,10 +103,33 @@ export class TeacherView extends Component {
     dispatchGetUsers();
   }
 
-  handleChangeStudent = value => {
-    this.setState({
-      selectedStudent: value,
-    });
+  componentDidUpdate({ minDate: oldMinDate, maxDate: oldMaxDate }) {
+    const { minDate, maxDate } = this.props;
+    if (minDate !== oldMinDate) {
+      // eslint-disable-next-line react/no-did-update-set-state
+      this.setState({
+        fromDate: minDate,
+      });
+    }
+    if (maxDate !== oldMaxDate) {
+      // eslint-disable-next-line react/no-did-update-set-state
+      this.setState({
+        toDate: maxDate,
+      });
+    }
+  }
+
+  handleActionsDateRange = () => {
+    const { fromDate, toDate } = this.state;
+    const { actions } = this.props;
+    const rangedMoment = extendMoment(moment);
+    const start = rangedMoment.utc(fromDate);
+    const end = rangedMoment.utc(toDate);
+    const range = rangedMoment.range(start, end);
+    return Array.from(range.by('days')).map(day => ({
+      x: day.format(DATE_FROMAT),
+      y: actions.find(({ date }) => date.isSame(day, 'days'))?.count ?? 0,
+    }));
   };
 
   render() {
@@ -174,12 +139,11 @@ export class TeacherView extends Component {
       classes,
       // this property allows us to do translations and is injected by i18next
       t,
-      // these properties are injected by the redux mapStateToProps method
-      appInstanceResources,
-      studentOptions,
       dispatchOpenSettings,
+      theme,
     } = this.props;
-    const { selectedStudent } = this.state;
+    const { fromDate, toDate, focusedInput } = this.state;
+    const actionsDateRange = this.handleActionsDateRange();
     return (
       <>
         <Grid container spacing={0}>
@@ -196,45 +160,108 @@ export class TeacherView extends Component {
                 </pre>
               </a>
             </Paper>
-            <Typography variant="h5" color="inherit">
-              {t('View the Students in the Sample Space')}
-            </Typography>
-            <Select
-              className="StudentSelect"
-              value={selectedStudent}
-              options={studentOptions}
-              onChange={this.handleChangeStudent}
-              isClearable
-            />
-            <hr />
-            <Typography variant="h6" color="inherit">
-              {t(
-                'This table illustrates how an app can save resources on the server.',
-              )}
-            </Typography>
             <Paper className={classes.root}>
-              <Table className={classes.table}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>ID</TableCell>
-                    <TableCell>App Instance</TableCell>
-                    <TableCell>Value</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {renderAppInstanceResources(appInstanceResources, this.props)}
-                </TableBody>
-              </Table>
+              <Typography
+                variant="h5"
+                color="inherit"
+                className={classes.chartTitle}
+              >
+                {t('Number of Daily Actions')}
+              </Typography>
+              <DateRangePicker
+                startDate={fromDate}
+                startDateId="1"
+                endDate={toDate}
+                endDateId="2"
+                onDatesChange={({ startDate, endDate }) => {
+                  this.handleActionsDateRange();
+                  this.setState({ fromDate: startDate, toDate: endDate });
+                }}
+                focusedInput={focusedInput}
+                onFocusChange={input => this.setState({ focusedInput: input })}
+                isOutsideRange={() => false}
+                small
+              />
+              <Line
+                data={[
+                  {
+                    id: 1,
+                    data: actionsDateRange,
+                  },
+                ]}
+                xScale={{
+                  type: 'time',
+                  format: '%d/%m/%Y',
+                  useUTC: true,
+                  precision: 'day',
+                }}
+                yScale={{
+                  type: 'linear',
+                  stacked: false,
+                }}
+                axisLeft={{
+                  orient: 'left',
+                  legendPosition: 'middle',
+                  legend: t('Number of Actions'),
+                  legendOffset: -35,
+                }}
+                curve="linear"
+                axisBottom={{
+                  orient: 'bottom',
+                  format: '%d/%m/%y',
+                  legend: 'Time',
+                  legendOffset: 40,
+                  tickRotation: -25,
+                  legendPosition: 'middle',
+                }}
+                colors={theme.palette.primary.main}
+                enablePoints={false}
+                xFormat="time:%d/%m/%Y"
+                enableSlices="x"
+                sliceTooltip={({ slice }) => {
+                  return (
+                    <div
+                      style={{
+                        background: 'white',
+                        padding: '9px 12px',
+                        border: '1px solid #ccc',
+                      }}
+                    >
+                      {slice.points.map(
+                        ({
+                          data: { xFormatted, yFormatted },
+                          serieColor,
+                          id,
+                        }) => (
+                          <>
+                            <div>
+                              {`${t('Date')}`}
+                              :&nbsp;
+                              {xFormatted}
+                            </div>
+                            <div>
+                              {`${t('Number of Actions')}`}
+                              :&nbsp;
+                              <span
+                                key={id}
+                                style={{
+                                  color: serieColor,
+                                }}
+                              >
+                                {yFormatted}
+                              </span>
+                            </div>
+                          </>
+                        ),
+                      )}
+                    </div>
+                  );
+                }}
+                margin={NIVO_LINE_MARGIN}
+                width={900}
+                height={400}
+              />
             </Paper>
-            <Button
-              color="primary"
-              className={classes.button}
-              variant="contained"
-              onClick={() => generateRandomAppInstanceResource(this.props)}
-            >
-              {t('Save a Random App Instance Resource via the API')}
-            </Button>
           </Grid>
         </Grid>
         <Settings />
@@ -252,15 +279,37 @@ export class TeacherView extends Component {
 }
 
 // get the app instance resources that are saved in the redux store
-const mapStateToProps = ({ users, appInstanceResources }) => ({
-  // we transform the list of students in the database
-  // to the shape needed by the select component
-  studentOptions: users.content.map(({ id, name }) => ({
-    value: id,
-    label: name,
-  })),
-  appInstanceResources: appInstanceResources.content,
-});
+const mapStateToProps = ({ appInstanceResources, action }) => {
+  const actionsPerDay = action.content.reduce((acc, obj) => {
+    const spaceDate = moment(obj.createdAt);
+    const index = acc.findIndex(({ date }) => spaceDate.isSame(date, 'day'));
+    if (index > 0) {
+      acc[index] = {
+        date: spaceDate,
+        count: acc[index].count + 1,
+      };
+    } else {
+      acc.push({
+        date: spaceDate,
+        count: 1,
+      });
+    }
+    return acc;
+  }, []);
+  const sortedActions = actionsPerDay.sort(({ date: dateA }, { date: dateB }) =>
+    moment(dateA).isBefore(dateB),
+  );
+  const {
+    0: minDateAction,
+    [actionsPerDay.length - 1]: maxDateAction,
+  } = actionsPerDay;
+  return {
+    appInstanceResources: appInstanceResources.content,
+    actions: sortedActions,
+    minDate: minDateAction?.date,
+    maxDate: maxDateAction?.date,
+  };
+};
 
 // allow this component to dispatch a post
 // request to create an app instance resource
@@ -278,5 +327,6 @@ const ConnectedComponent = connect(
 )(TeacherView);
 
 const StyledComponent = withStyles(TeacherView.styles)(ConnectedComponent);
+const ThemedComponent = withTheme(StyledComponent);
 
-export default withTranslation()(StyledComponent);
+export default withTranslation()(ThemedComponent);
