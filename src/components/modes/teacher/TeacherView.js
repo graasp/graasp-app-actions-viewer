@@ -21,7 +21,6 @@ import {
   postAppInstanceResource,
 } from '../../../actions';
 import { getUsers } from '../../../actions/users';
-import { addQueryParamsToUrl } from '../../../utils/url';
 import Settings from './Settings';
 import { MATERIAL_UI_THEME_TYPE } from '../../../config/propTypes';
 import { NIVO_LINE_MARGIN } from '../../../config/styles';
@@ -148,18 +147,6 @@ export class TeacherView extends Component {
       <>
         <Grid container spacing={0}>
           <Grid item xs={12} className={classes.main}>
-            <Paper className={classes.message}>
-              {t(
-                'This is the teacher view. Switch to the student view by clicking on the URL below.',
-              )}
-              <a href={addQueryParamsToUrl({ mode: 'student' })}>
-                <pre>
-                  {`${window.location.host}/${addQueryParamsToUrl({
-                    mode: 'student',
-                  })}`}
-                </pre>
-              </a>
-            </Paper>
             <Paper className={classes.root}>
               <Typography
                 variant="h5"
